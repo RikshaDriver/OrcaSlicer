@@ -4097,6 +4097,18 @@ void PrintConfigDef::init_fff_params()
     def->tooltip = L("Disable generating of the M73: Set remaining print time in the final gcode");
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionBool(false));
+	
+	def = this->add("force_toolnum", coBool);
+    def->label = L("Force Tool Number");
+    def->tooltip = L("Forcefully add Tool Number to gcode commands");
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionBool(false));
+
+	def = this->add("comment_newline", coBool);
+    def->label = L("Comments on new line");
+    def->tooltip = L("Force gcode command comments on new line");
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionBool(false));
 
     def = this->add("seam_position", coEnum);
     def->label = L("Seam position");

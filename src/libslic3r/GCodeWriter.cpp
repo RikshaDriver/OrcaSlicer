@@ -75,9 +75,16 @@ std::string GCodeWriter::preamble()
         FLAVOR_IS(gcfKlipper))
     {
         if (this->config.use_relative_e_distances) {
-            gcode << "M83 ; use relative distances for extrusion\n";
+
+            gcode << "M83";
+            if (this->config.comment_newline)
+                gcode << "\n";
+            gcode << " ; use relative distances for extrusion\n";
         } else {
-            gcode << "M82 ; use absolute distances for extrusion\n";
+            gcode << "M82";
+            if (this->config.comment_newline)
+                gcode << "\n";
+            gcode << " ; use absolute distances for extrusion\n";
         }
         gcode << this->reset_e(true);
     }
@@ -88,8 +95,12 @@ std::string GCodeWriter::preamble()
 std::string GCodeWriter::postamble() const
 {
     std::ostringstream gcode;
-    if (FLAVOR_IS(gcfMachinekit))
-          gcode << "M2 ; end of program\n";
+    if (FLAVOR_IS(gcfMachinekit)) {
+        gcode << "M2";
+        if (this->config.comment_newline)
+            gcode << "\n";
+        gcode << " ; end of program\n";
+    }
     return gcode.str();
 }
 
@@ -127,6 +138,8 @@ std::string GCodeWriter::set_temperature(unsigned int temperature, GCodeFlavor f
             gcode << " T" << tool;
         }
     }
+    if (this->config.comment_newline)
+        gcode << "\n";
     gcode << " ; " << comment << "\n";
 
     if ((flavor == gcfTeacup || flavor == gcfRepRapFirmware) && wait)
@@ -138,7 +151,7 @@ std::string GCodeWriter::set_temperature(unsigned int temperature, GCodeFlavor f
 std::string GCodeWriter::set_temperature(unsigned int temperature, bool wait, int tool) const
 {
     // set tool to -1 to make sure we won't emit T parameter for single extruder or SEMM
-    if (!this->multiple_extruders || m_single_extruder_multi_material)
+    if (!this->config.force_toolnum && (!this->multiple_extruders || m_single_extruder_multi_material))
         tool = -1;
     return set_temperature(temperature, this->config.gcode_flavor, wait, tool);
 }
@@ -164,7 +177,10 @@ std::string GCodeWriter::set_bed_temperature(int temperature, bool wait)
         comment = "set bed temperature";
     }
 
-    gcode << code << " S" << temperature << " ; " << comment << "\n";
+    gcode << code << " S" << temperature;
+    if (this->config.comment_newline)
+        gcode << "\n";
+	gcode << " ; " << comment << "\n";
     return gcode.str();
 }
 
@@ -178,15 +194,20 @@ std::string GCodeWriter::set_chamber_temperature(int temperature, bool wait)
         // Orca: should we let the M191 command to turn on the auxiliary fan?
         if (config.auxiliary_fan)
             gcode << "M106 P2 S255 \n";
-        gcode << "M191 S" << std::to_string(temperature) << " ;"
-              << "set chamber_temperature and wait for it to be reached\n";
+        gcode << "M191 S" << std::to_string(temperature);
+        if (this->config.comment_newline)
+            gcode << "\n";
+        gcode << " ; set chamber_temperature and wait for it to be reached\n";
         if (config.auxiliary_fan)
             gcode << "M106 P2 S0 \n";
     }
     else {
         code = "M141";
         comment = "set chamber_temperature";
-        gcode << code << " S" << temperature << ";" << comment << "\n";
+        gcode << code << " S" << temperature;
+        if (this->config.comment_newline)
+            gcode << "\n";
+        gcode << " ;" << comment << "\n";
     }
     return gcode.str();
 }
@@ -225,7 +246,11 @@ std::string GCodeWriter::set_acceleration_internal(Acceleration type, unsigned i
     else
         gcode << "M204 S" << acceleration;
 
-    if (GCodeWriter::full_gcode_comment) gcode << " ; adjust acceleration";
+    if (GCodeWriter::full_gcode_comment) {
+        if (this->config.comment_newline)
+            gcode << "\n";
+        gcode << " ; adjust acceleration";
+    }
     gcode << "\n";
     
     return gcode.str();
@@ -262,7 +287,11 @@ std::string GCodeWriter::set_jerk_xy(double jerk)
     if (m_is_bbl_printers)
         gcode << std::setprecision(2) << " Z" << m_max_jerk_z << " E" << m_max_jerk_e;
 
-    if (GCodeWriter::full_gcode_comment) gcode << " ; adjust jerk";
+    if (GCodeWriter::full_gcode_comment) {
+        if (this->config.comment_newline)
+            gcode << "\n";
+        gcode << " ; adjust jerk";
+    }
     gcode << "\n";
 
     return gcode.str();
@@ -305,8 +334,11 @@ std::string GCodeWriter::set_accel_and_jerk(unsigned int acceleration, double je
     if(is_empty)
         return std::string();
 
-    if (GCodeWriter::full_gcode_comment)
+    if (GCodeWriter::full_gcode_comment) {
+        if (this->config.comment_newline)
+            gcode << "\n";
         gcode << " ; adjust VELOCITY_LIMIT(accel/jerk)";
+    }
     gcode << "\n";
 
     return gcode.str();
@@ -320,15 +352,28 @@ std::string GCodeWriter::set_pressure_advance(double pa) const
         return gcode.str();
     if(m_is_bbl_printers){
         //SoftFever: set L1000 to use linear model
-        gcode << "M900 K" <<std::setprecision(4)<< pa << " L1000 M10 ; Override pressure advance value\n";
+        gcode << "M900 K" << std::setprecision(4) << pa << " L1000 M10";
+        if (this->config.comment_newline)
+            gcode << "\n";
+        gcode << " ; Override pressure advance value\n";
     }
     else{
-        if (FLAVOR_IS(gcfKlipper))
-            gcode << "SET_PRESSURE_ADVANCE ADVANCE=" << std::setprecision(4) << pa << "; Override pressure advance value\n";
-        else if(FLAVOR_IS(gcfRepRapFirmware))
-            gcode << ("M572 D0 S") << std::setprecision(4) << pa << "; Override pressure advance value\n";
-        else
-            gcode << "M900 K" <<std::setprecision(4)<< pa << "; Override pressure advance value\n";
+        if (FLAVOR_IS(gcfKlipper)) {
+            gcode << "SET_PRESSURE_ADVANCE ADVANCE=" << std::setprecision(4) << pa;
+            if (this->config.comment_newline)
+                gcode << "\n";
+            gcode << " ; Override pressure advance value\n";
+        } else if (FLAVOR_IS(gcfRepRapFirmware)) {
+            gcode << ("M572 D0 S") << std::setprecision(4) << pa;
+            if (this->config.comment_newline)
+                gcode << "\n";
+            gcode << " ; Override pressure advance value\n";
+        } else {
+            gcode << "M900 K" <<std::setprecision(4)<< pa;
+            if (this->config.comment_newline)
+                gcode << "\n";
+		    gcode << " ; Override pressure advance value\n";
+		}
     }
     return gcode.str();
 }
@@ -352,7 +397,11 @@ std::string GCodeWriter::reset_e(bool force)
         std::ostringstream gcode;
         gcode << "G92 E0";
         //BBS
-        if (GCodeWriter::full_gcode_comment) gcode << " ; reset extrusion distance";
+        if (GCodeWriter::full_gcode_comment) {
+            if (this->config.comment_newline)
+                gcode << "\n";
+            gcode << " ; reset extrusion distance";
+        }
         gcode << "\n";
         return gcode.str();
     } else {
@@ -375,7 +424,11 @@ std::string GCodeWriter::update_progress(unsigned int num, unsigned int tot, boo
     std::ostringstream gcode;
     gcode << "M73 P" << percent;
     //BBS
-    if (GCodeWriter::full_gcode_comment) gcode << " ; update progress";
+    if (GCodeWriter::full_gcode_comment) {
+        if (this->config.comment_newline)
+            gcode << "\n";
+        gcode << " ; update progress";
+    }
     gcode << "\n";
     return gcode.str();
 }
@@ -400,8 +453,11 @@ std::string GCodeWriter::toolchange(unsigned int extruder_id)
     if (this->multiple_extruders || (this->config.filament_diameter.values.size() > 1 && !is_bbl_printers())) {
         gcode << this->toolchange_prefix() << extruder_id;
         //BBS
-        if (GCodeWriter::full_gcode_comment)
+        if (GCodeWriter::full_gcode_comment) {
+            if (this->config.comment_newline)
+                gcode << "\n";
             gcode << " ; change extruder";
+        }
         gcode << "\n";
         gcode << this->reset_e(true);
     }
@@ -738,7 +794,10 @@ std::string GCodeWriter::_retract(double length, double restart_extra, const std
     std::string gcode;
     if (double dE = m_extruder->retract(length, restart_extra);  !is_zero(dE)) {
         if (this->config.use_firmware_retraction) {
-            gcode = FLAVOR_IS(gcfMachinekit) ? "G22 ; retract\n" : "G10 ; retract\n";
+            gcode = FLAVOR_IS(gcfMachinekit) ? "G22" : "G10";
+            if (this->config.comment_newline)
+                gcode += "\n";
+            gcode += " ;  retract\n ";
         }
         else {
             // BBS
@@ -751,8 +810,12 @@ std::string GCodeWriter::_retract(double length, double restart_extra, const std
         }
     }
     
-    if (FLAVOR_IS(gcfMakerWare))
-        gcode += "M103 ; extruder off\n";
+    if (FLAVOR_IS(gcfMakerWare)) {
+        gcode += "M103";
+        if (this->config.comment_newline)
+            gcode += "\n";
+        gcode += " ; extruder off\n";
+    }
 
     return gcode;
 }
@@ -761,12 +824,19 @@ std::string GCodeWriter::unretract()
 {
     std::string gcode;
     
-    if (FLAVOR_IS(gcfMakerWare))
-        gcode = "M101 ; extruder on\n";
+    if (FLAVOR_IS(gcfMakerWare)) {
+        gcode = "M101";
+        if (this->config.comment_newline)
+            gcode += "\n";
+        gcode += " ; extruder on\n";
+    }
     
     if (double dE = m_extruder->unretract(); !is_zero(dE)) {
         if (this->config.use_firmware_retraction) {
-            gcode += FLAVOR_IS(gcfMachinekit) ? "G23 ; unretract\n" : "G11 ; unretract\n";
+            gcode += FLAVOR_IS(gcfMachinekit) ? "G23" : "G11";
+            if (this->config.comment_newline)
+                gcode += "\n";
+            gcode += " ; unretract\n ";
             gcode += this->reset_e();
         }
         else {
@@ -776,7 +846,10 @@ std::string GCodeWriter::unretract()
             w.emit_e(m_extruder->E());
             w.emit_f(m_extruder->deretract_speed() * 60.);
             //BBS
-            w.emit_comment(GCodeWriter::full_gcode_comment, " ; unretract");
+            if(this->config.comment_newline)
+                w.emit_comment(GCodeWriter::full_gcode_comment, "\n ; unretract");
+            else
+                w.emit_comment(GCodeWriter::full_gcode_comment, " ; unretract");
             gcode += w.string();
         }
     }
@@ -835,8 +908,11 @@ std::string GCodeWriter::set_fan(const GCodeFlavor gcode_flavor, unsigned int sp
         default:
             gcode << "M106 S0";    break;
         }
-        if (GCodeWriter::full_gcode_comment)
+        if (GCodeWriter::full_gcode_comment) {
+            if (config.comment_newline)
+                gcode << "\n";
             gcode << " ; disable fan";
+        }
         gcode << "\n";
     } else {
         switch (gcode_flavor) {
@@ -849,8 +925,11 @@ std::string GCodeWriter::set_fan(const GCodeFlavor gcode_flavor, unsigned int sp
         default:
             gcode << "M106 S" << static_cast<unsigned int>(255.5 * speed / 100.0); break;
         }
-        if (GCodeWriter::full_gcode_comment) 
+        if (GCodeWriter::full_gcode_comment) {
+            if (config.comment_newline)
+                gcode << "\n";
             gcode << " ; enable fan";
+        }
         gcode << "\n";
     }
     return gcode.str();
@@ -869,10 +948,15 @@ std::string GCodeWriter::set_additional_fan(unsigned int speed)
 
     gcode << "M106 " << "P2 " << "S" << (int)(255.0 * speed / 100.0);
     if (GCodeWriter::full_gcode_comment) {
-        if (speed == 0)
+        if (speed == 0) {
+            if (config.comment_newline)
+                gcode << "\n";
             gcode << " ; disable additional fan ";
-        else
+        } else {
+            if (config.comment_newline)
+                gcode << "\n";
             gcode << " ; enable additional fan ";
+        }
     }
     gcode << "\n";
     return gcode.str();
